@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""High-precision numerical sanity check for the C_42 certificate.
+"""High-precision numerical sanity check for the two-block C_42 certificate.
 
-This script is not the certificate.  It uses mpmath to confirm the numerical
+This script is not the certificate. It uses mpmath to confirm the numerical
 shape of the exact rational-interval verification.
 """
 
@@ -13,33 +13,70 @@ import mpmath as mp
 def main() -> None:
     mp.mp.dps = 90
 
-    alpha = mp.mpc(mp.mpf(567376361) / 10**9, mp.mpf(542239436) / 10**9)
-    a = mp.mpf(567376361) / 10**9
-    s = 1 - alpha
-    c = mp.mpf(6936763075) / 10**10
+    tau = mp.mpf(36988243) / 10**8
+    alpha = mp.mpc(mp.mpf(61927309) / 10**8, mp.mpf(57623741) / 10**8)
+    eta = mp.mpc(mp.mpf(59839764) / 10**8, -mp.mpf(34485185) / 10**8)
+    c = mp.mpf(3453269) / 5000000
 
-    def i_of(A: mp.mpc | mp.mpf) -> mp.mpc:
+    s = 1 - alpha
+    w = eta - s
+    l_end = 1 - 2 * tau
+    b_end = 1 - tau
+
+    def i_of(A: mp.mpc | mp.mpf, x: mp.mpf) -> mp.mpc:
         total = mp.mpc(0)
         r = 0
         while True:
-            term = mp.power(2, -A - r) / (A + r)
+            term = mp.power(x, A + r) / (A + r)
             total += term
             if abs(term) < mp.mpf("1e-95"):
                 break
             r += 1
         return total
 
-    i_alpha = i_of(alpha)
-    i_a = mp.re(i_of(a))
-    ratio = abs(1 + s * i_alpha) / i_a
+    def a2_series() -> mp.mpc:
+        total = mp.mpc(0)
+        harmonic = mp.mpf(0)
+        log_ratio = mp.log(b_end / tau)
+        m = 0
+        while True:
+            if m > 0:
+                harmonic += 1 / (m * b_end**m)
+            coeff = log_ratio - harmonic
+            term = 2 * coeff * mp.power(l_end, alpha + m) / (alpha + m)
+            total += term
+            if abs(term) < mp.mpf("1e-95"):
+                break
+            m += 1
+        return total
 
-    print("I_alpha =")
-    print(mp.nstr(mp.re(i_alpha), 80))
-    print("-")
-    print(mp.nstr(-mp.im(i_alpha), 80), "i")
+    k = i_of(alpha, tau)
+    d = mp.re(i_of(mp.re(alpha), tau))
+    a1 = i_of(alpha, b_end) - k
+    a2 = a2_series()
+    y = 1 - w * a1 + (w**2 / 2) * a2 + s * k
+    ratio = abs(y) / d
+
+    def print_complex(label: str, z: mp.mpc) -> None:
+        sign = "-" if mp.im(z) < 0 else "+"
+        print(f"{label} =")
+        print(mp.nstr(mp.re(z), 80))
+        print(sign)
+        print(mp.nstr(abs(mp.im(z)), 80), "i")
+        print()
+
+    print_complex("K", k)
+    print("D =")
+    print(mp.nstr(d, 80))
     print()
-    print("I_a =")
-    print(mp.nstr(i_a, 80))
+    print_complex("A1", a1)
+    print_complex("A2", a2)
+    print_complex("Y", y)
+    print("|Y|^2 =")
+    print(mp.nstr(abs(y) ** 2, 80))
+    print()
+    print("C^2 D^2 =")
+    print(mp.nstr(c**2 * d**2, 80))
     print()
     print("ratio =")
     print(mp.nstr(ratio, 80))

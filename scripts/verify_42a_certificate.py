@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Exact verifier for the proposed C_42 upper-bound certificate.
+"""Exact verifier for the proposed two-block C_42 certificate.
 
-All pass/fail comparisons are made with integer or rational arithmetic.
-Decimal arithmetic is used only for human-readable output.
+All pass/fail comparisons are made with integer or rational interval
+arithmetic. Decimal arithmetic is used only for human-readable output.
 """
 
 from __future__ import annotations
@@ -10,18 +10,46 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal, getcontext
 from fractions import Fraction
+from functools import lru_cache
 
 
-DEN = 10**9
-ALPHA_RE = Fraction(567376361, DEN)
-ALPHA_IM = Fraction(542239436, DEN)
+DEN = 10**8
+TAU = Fraction(36988243, DEN)
+L = 1 - 2 * TAU
+BETA_END = 1 - TAU
+
+ALPHA_RE = Fraction(61927309, DEN)
+ALPHA_IM = Fraction(57623741, DEN)
 A = ALPHA_RE
 B = ALPHA_IM
-S_RE = Fraction(432623639, DEN)
-S_IM_ABS = Fraction(542239436, DEN)  # s = S_RE - i S_IM_ABS
-C = Fraction(6936763075, 10**10)
-N = 140
-TAIL = Fraction(7, 10**45)
+
+S_RE = 1 - ALPHA_RE
+S_IM = -ALPHA_IM
+ETA_RE = Fraction(59839764, DEN)
+ETA_IM = Fraction(-34485185, DEN)
+W_RE = ETA_RE - S_RE
+W_IM = ETA_IM - S_IM
+
+C = Fraction(3453269, 5000000)
+PUBLIC_BOUND = Fraction(69368, 100000)
+
+N_I = 90
+N_A2 = 80
+LOG_TERMS = 45
+TAYLOR_TERMS = 35
+ROUND_DEN = 10**60
+
+
+def round_down(q: Fraction) -> Fraction:
+    return Fraction((q.numerator * ROUND_DEN) // q.denominator, ROUND_DEN)
+
+
+def round_up(q: Fraction) -> Fraction:
+    return Fraction(-((-q.numerator * ROUND_DEN) // q.denominator), ROUND_DEN)
+
+
+def enclose(lo: Fraction, hi: Fraction) -> "Interval":
+    return Interval(round_down(lo), round_up(hi))
 
 
 @dataclass(frozen=True)
@@ -33,28 +61,64 @@ class Interval:
         if self.lo > self.hi:
             raise ValueError((self.lo, self.hi))
 
-    def __add__(self, other: Interval) -> Interval:
-        return Interval(self.lo + other.lo, self.hi + other.hi)
+    @staticmethod
+    def point(x: Fraction | int) -> "Interval":
+        q = Fraction(x)
+        return Interval(q, q)
 
-    def __sub__(self, other: Interval) -> Interval:
-        return Interval(self.lo - other.hi, self.hi - other.lo)
+    def __add__(self, other: "Interval") -> "Interval":
+        return enclose(self.lo + other.lo, self.hi + other.hi)
 
-    def __mul__(self, other: Interval) -> Interval:
+    def __sub__(self, other: "Interval") -> "Interval":
+        return enclose(self.lo - other.hi, self.hi - other.lo)
+
+    def __mul__(self, other: "Interval") -> "Interval":
         vals = (
             self.lo * other.lo,
             self.lo * other.hi,
             self.hi * other.lo,
             self.hi * other.hi,
         )
-        return Interval(min(vals), max(vals))
+        return enclose(min(vals), max(vals))
 
-    def scale(self, q: Fraction) -> Interval:
+    def scale(self, q: Fraction | int) -> "Interval":
+        q = Fraction(q)
         if q >= 0:
-            return Interval(q * self.lo, q * self.hi)
-        return Interval(q * self.hi, q * self.lo)
+            return enclose(q * self.lo, q * self.hi)
+        return enclose(q * self.hi, q * self.lo)
 
-    def widen(self, eps: Fraction) -> Interval:
-        return Interval(self.lo - eps, self.hi + eps)
+    def widen(self, eps: Fraction) -> "Interval":
+        return enclose(self.lo - eps, self.hi + eps)
+
+
+@dataclass(frozen=True)
+class ComplexInterval:
+    re: Interval
+    im: Interval
+
+    @staticmethod
+    def point(re: Fraction | int, im: Fraction | int = 0) -> "ComplexInterval":
+        return ComplexInterval(Interval.point(re), Interval.point(im))
+
+    def __add__(self, other: "ComplexInterval") -> "ComplexInterval":
+        return ComplexInterval(self.re + other.re, self.im + other.im)
+
+    def __sub__(self, other: "ComplexInterval") -> "ComplexInterval":
+        return ComplexInterval(self.re - other.re, self.im - other.im)
+
+    def scale(self, q: Fraction | int) -> "ComplexInterval":
+        return ComplexInterval(self.re.scale(q), self.im.scale(q))
+
+    def scale_interval(self, q: Interval) -> "ComplexInterval":
+        return ComplexInterval(self.re * q, self.im * q)
+
+    def mul_exact(self, re: Fraction, im: Fraction) -> "ComplexInterval":
+        real = self.re.scale(re) - self.im.scale(im)
+        imag = self.re.scale(im) + self.im.scale(re)
+        return ComplexInterval(real, imag)
+
+    def widen(self, eps: Fraction) -> "ComplexInterval":
+        return ComplexInterval(self.re.widen(eps), self.im.widen(eps))
 
 
 def dec(q: Fraction, prec: int = 70) -> str:
@@ -66,24 +130,50 @@ def interval_dec(x: Interval, prec: int = 45) -> str:
     return f"[{dec(x.lo, prec)}, {dec(x.hi, prec)}]"
 
 
-def log2_interval(k_terms: int = 80) -> Interval:
-    partial = sum(
-        Fraction(2, (2 * k + 1) * 3 ** (2 * k + 1))
-        for k in range(k_terms + 1)
-    )
-    remainder = Fraction(
-        2,
-        (2 * k_terms + 3) * 3 ** (2 * k_terms + 3),
-    ) / (1 - Fraction(1, 9))
-    return Interval(partial, partial + remainder)
+def log_near_one_interval(x: Fraction, terms: int = LOG_TERMS) -> Interval:
+    """Enclose log(x) using 2 atanh((x-1)/(x+1))."""
+    y = (x - 1) / (x + 1)
+    partial = Fraction(0)
+    y_power = y
+    y2 = y * y
+    for k in range(terms + 1):
+        partial += 2 * y_power / (2 * k + 1)
+        y_power *= y2
+    rem = 2 * abs(y_power) / ((2 * terms + 3) * (1 - y2))
+    return enclose(partial - rem, partial + rem)
 
 
-def exp_neg_point_interval(x: Fraction, terms: int = 60) -> Interval:
-    # e^{-x} = 1 - x + x^2/2! - ... .  For 0 < x < 1 the terms decrease.
+@lru_cache(maxsize=None)
+def log2_interval() -> Interval:
+    return log_near_one_interval(Fraction(2), LOG_TERMS)
+
+
+@lru_cache(maxsize=None)
+def log_interval(x: Fraction) -> Interval:
+    """Enclose log(x), reducing by powers of two before using atanh."""
+    z = x
+    shift = 0
+    while z < Fraction(2, 3):
+        z *= 2
+        shift += 1
+    while z > Fraction(4, 3):
+        z /= 2
+        shift -= 1
+
+    near = log_near_one_interval(z, LOG_TERMS)
+    if shift == 0:
+        return near
+    return near - log2_interval().scale(shift)
+
+
+@lru_cache(maxsize=None)
+def exp_neg_point_interval(x: Fraction, terms: int = TAYLOR_TERMS) -> Interval:
+    # e^{-x} = 1 - x + x^2/2! - ... . Here 0 < x < 1.
+    assert 0 <= x < 1
     term = Fraction(1)
     partial = Fraction(1)
-    upper = partial
     lower = None
+    upper = partial
     for n in range(1, 2 * terms + 2):
         term *= x
         term /= n
@@ -94,16 +184,26 @@ def exp_neg_point_interval(x: Fraction, terms: int = 60) -> Interval:
             partial += term
             upper = partial
     assert lower is not None
-    return Interval(lower, upper)
+    return enclose(lower, upper)
 
 
-def cos_point_interval(x: Fraction, terms: int = 60) -> Interval:
-    # cos(x) = 1 - x^2/2! + x^4/4! - ... .  For 0 < x < 1 the terms decrease.
+def exp_neg_interval(x: Interval) -> Interval:
+    # e^{-x} is decreasing.
+    assert 0 <= x.lo <= x.hi < 1
+    lower = exp_neg_point_interval(x.hi).lo
+    upper = exp_neg_point_interval(x.lo).hi
+    return enclose(lower, upper)
+
+
+@lru_cache(maxsize=None)
+def cos_point_interval(x: Fraction, terms: int = TAYLOR_TERMS) -> Interval:
+    # cos(x) = 1 - x^2/2! + x^4/4! - ... . Here 0 <= x < 1.
+    assert 0 <= x < 1
     x2 = x * x
     term = Fraction(1)
     partial = Fraction(1)
-    upper = partial
     lower = None
+    upper = partial
     for k in range(1, 2 * terms + 2):
         term *= x2
         term /= (2 * k - 1) * (2 * k)
@@ -114,16 +214,18 @@ def cos_point_interval(x: Fraction, terms: int = 60) -> Interval:
             partial += term
             upper = partial
     assert lower is not None
-    return Interval(lower, upper)
+    return enclose(lower, upper)
 
 
-def sin_point_interval(x: Fraction, terms: int = 60) -> Interval:
-    # sin(x) = x - x^3/3! + x^5/5! - ... .  For 0 < x < 1 the terms decrease.
+@lru_cache(maxsize=None)
+def sin_point_interval(x: Fraction, terms: int = TAYLOR_TERMS) -> Interval:
+    # sin(x) = x - x^3/3! + x^5/5! - ... . Here 0 <= x < 1.
+    assert 0 <= x < 1
     x2 = x * x
     term = x
     partial = x
-    upper = partial
     lower = None
+    upper = partial
     for k in range(1, 2 * terms + 2):
         term *= x2
         term /= (2 * k) * (2 * k + 1)
@@ -137,184 +239,179 @@ def sin_point_interval(x: Fraction, terms: int = 60) -> Interval:
     return Interval(lower, upper)
 
 
-def exp_neg_interval(x: Interval) -> Interval:
-    # e^{-x} is decreasing.
-    lower = exp_neg_point_interval(x.hi).lo
-    upper = exp_neg_point_interval(x.lo).hi
+def cos_interval(theta: Interval) -> Interval:
+    # All calls are inside (-1, 0), so use evenness and monotonicity.
+    assert -1 < theta.lo <= theta.hi <= 0
+    abs_lo = -theta.hi
+    abs_hi = -theta.lo
+    lower = cos_point_interval(abs_hi).lo
+    upper = cos_point_interval(abs_lo).hi
     return Interval(lower, upper)
 
 
-def cos_interval_on_small_positive(x: Interval) -> Interval:
-    # cos(x) is decreasing on this interval, which lies in (0, 1).
-    assert 0 < x.lo < x.hi < 1
-    lower = cos_point_interval(x.hi).lo
-    upper = cos_point_interval(x.lo).hi
+def sin_interval(theta: Interval) -> Interval:
+    # All calls are inside (-1, 0), where sin is increasing.
+    assert -1 < theta.lo <= theta.hi <= 0
+    abs_lo = -theta.hi
+    abs_hi = -theta.lo
+    lower = -sin_point_interval(abs_hi).hi
+    upper = -sin_point_interval(abs_lo).lo
     return Interval(lower, upper)
 
 
-def sin_interval_on_small_positive(x: Interval) -> Interval:
-    # sin(x) is increasing on this interval, which lies in (0, 1).
-    assert 0 < x.lo < x.hi < 1
-    lower = sin_point_interval(x.lo).lo
-    upper = sin_point_interval(x.hi).hi
-    return Interval(lower, upper)
+@lru_cache(maxsize=None)
+def x_to_alpha_interval(x: Fraction) -> ComplexInterval:
+    logx = log_interval(x)
+    exp_part = exp_neg_interval(logx.scale(-A))
+    theta = logx.scale(B)
+    return ComplexInterval(exp_part * cos_interval(theta), exp_part * sin_interval(theta))
 
 
-def finite_sum_alpha() -> tuple[Fraction, Fraction]:
-    re = Fraction(0)
-    im = Fraction(0)
-    for r in range(N):
-        p = 567376361 + r * DEN
-        q = 542239436
-        den = p * p + q * q
-        re += Fraction(DEN * p, den * 2**r)
-        im -= Fraction(DEN * q, den * 2**r)
-    return re, im
+@lru_cache(maxsize=None)
+def x_to_a_interval(x: Fraction) -> Interval:
+    return exp_neg_interval(log_interval(x).scale(-A))
 
 
-def finite_sum_a() -> Fraction:
+def reciprocal_alpha_plus(r: int) -> tuple[Fraction, Fraction]:
+    re = A + r
+    im = B
+    den = re * re + im * im
+    return re / den, -im / den
+
+
+def finite_i_alpha_sum(x: Fraction, terms: int = N_I) -> tuple[Fraction, Fraction]:
+    total_re = Fraction(0)
+    total_im = Fraction(0)
+    x_power = Fraction(1)
+    for r in range(terms):
+        inv_re, inv_im = reciprocal_alpha_plus(r)
+        total_re += x_power * inv_re
+        total_im += x_power * inv_im
+        x_power *= x
+    return total_re, total_im
+
+
+def finite_i_a_sum(x: Fraction, terms: int = N_I) -> Fraction:
     total = Fraction(0)
-    for r in range(N):
-        total += Fraction(DEN, (567376361 + r * DEN) * 2**r)
+    x_power = Fraction(1)
+    for r in range(terms):
+        total += x_power / (A + r)
+        x_power *= x
     return total
 
 
-def two_minus_alpha_interval() -> tuple[Interval, Interval]:
-    log2 = log2_interval()
-    u = log2.scale(A)
-    v = log2.scale(B)
-    e = exp_neg_interval(u)
-    c = cos_interval_on_small_positive(v)
-    s = sin_interval_on_small_positive(v)
-    real = e * c
-    imag_positive = e * s
-    imag = Interval(-imag_positive.hi, -imag_positive.lo)
-    return real, imag
+def i_alpha_tail_bound(x: Fraction, terms: int = N_I) -> Fraction:
+    xa_upper = x_to_a_interval(x).hi
+    return xa_upper * x**terms / ((A + terms) * (1 - x))
 
 
-def complex_interval_times_exact(
-    x: Interval,
-    y: Interval,
-    z_re: Fraction,
-    z_im: Fraction,
-) -> tuple[Interval, Interval]:
-    real = x.scale(z_re) - y.scale(z_im)
-    imag = x.scale(z_im) + y.scale(z_re)
-    return real, imag
+def i_alpha_interval(x: Fraction, terms: int = N_I) -> ComplexInterval:
+    power = x_to_alpha_interval(x)
+    sum_re, sum_im = finite_i_alpha_sum(x, terms)
+    value = power.mul_exact(sum_re, sum_im)
+    return value.widen(i_alpha_tail_bound(x, terms))
+
+
+def i_a_lower(x: Fraction, terms: int = N_I) -> Fraction:
+    return x_to_a_interval(x).lo * finite_i_a_sum(x, terms)
+
+
+def a2_tail_bound(log_ratio_upper: Fraction, l_to_a_upper: Fraction) -> Fraction:
+    m = N_A2
+    first = log_ratio_upper * L**m / (1 - L)
+    ratio = L / BETA_END
+    second = ratio**m / ((1 - BETA_END) * (1 - ratio))
+    return 2 * l_to_a_upper * (first + second) / (A + m)
+
+
+def a2_interval() -> ComplexInterval:
+    log_ratio = log_interval(BETA_END / TAU)
+    l_alpha = x_to_alpha_interval(L)
+    total = ComplexInterval.point(0)
+    harmonic = Fraction(0)
+    l_power = Fraction(1)
+
+    for m in range(N_A2):
+        if m > 0:
+            harmonic += Fraction(1, m) / (BETA_END**m)
+        coeff = log_ratio - Interval.point(harmonic)
+        inv_re, inv_im = reciprocal_alpha_plus(m)
+        term = l_alpha.scale(l_power).mul_exact(inv_re, inv_im).scale_interval(coeff).scale(2)
+        total = total + term
+        l_power *= L
+
+    tail = a2_tail_bound(log_ratio.hi, x_to_a_interval(L).hi)
+    return total.widen(tail)
+
+
+def norm_square_upper(z: ComplexInterval) -> Fraction:
+    vals = [
+        re * re + im * im
+        for re in (z.re.lo, z.re.hi)
+        for im in (z.im.lo, z.im.hi)
+    ]
+    return max(vals)
 
 
 def verify_radius() -> None:
-    margin = 6936763075**2 - 100 * (432623639**2 + 542239436**2)
-    assert margin == 61163413925
-    assert margin > 0
-    print(f"PASS radius inequality: exact margin = {margin}")
+    s_margin = C * C - (S_RE * S_RE + S_IM * S_IM)
+    eta_margin = C * C - (ETA_RE * ETA_RE + ETA_IM * ETA_IM)
+    assert s_margin == Fraction(693863919, 5000000000000000)
+    assert eta_margin == Fraction(1374484479, 10000000000000000)
+    assert s_margin > 0 and eta_margin > 0
+    print(f"PASS |1-alpha| < C: exact margin = {s_margin}")
+    print(f"PASS |eta| < C: exact margin = {eta_margin}")
 
 
-def verify_tail() -> None:
-    assert A > Fraction(14, 25)
-    assert 25**25 < 2**14 * 17**25
-    exact_majorant = Fraction(17, 3514 * 2**139)
-    assert exact_majorant < TAIL
-    margin = TAIL - exact_majorant
-    print(f"PASS tail bound: 17/(3514*2^139) < 7e-45, exact margin = {margin}")
+def verify_integrals() -> tuple[ComplexInterval, Fraction, ComplexInterval, ComplexInterval]:
+    k_interval = i_alpha_interval(TAU)
+    i_alpha_b = i_alpha_interval(BETA_END)
+    a1_interval = i_alpha_b - k_interval
+    d_lower = i_a_lower(TAU)
+    a2 = a2_interval()
+
+    print(f"PASS K enclosure: Re {interval_dec(k_interval.re)}, Im {interval_dec(k_interval.im)}")
+    print(f"PASS D lower bound: D > {dec(d_lower, 45)}")
+    print(f"PASS A1 enclosure: Re {interval_dec(a1_interval.re)}, Im {interval_dec(a1_interval.im)}")
+    print(f"PASS A2 enclosure: Re {interval_dec(a2.re)}, Im {interval_dec(a2.im)}")
+    return k_interval, d_lower, a1_interval, a2
 
 
-def verify_integrals() -> tuple[Interval, Interval, Fraction]:
-    s_alpha_re, s_alpha_im = finite_sum_alpha()
-    two_alpha_re, two_alpha_im = two_minus_alpha_interval()
-    i_re, i_im = complex_interval_times_exact(
-        two_alpha_re,
-        two_alpha_im,
-        s_alpha_re,
-        s_alpha_im,
+def verify_main_inequality(
+    k_interval: ComplexInterval,
+    d_lower: Fraction,
+    a1_interval: ComplexInterval,
+    a2: ComplexInterval,
+) -> None:
+    w2_re = W_RE * W_RE - W_IM * W_IM
+    w2_im = 2 * W_RE * W_IM
+
+    y = (
+        ComplexInterval.point(1)
+        - a1_interval.mul_exact(W_RE, W_IM)
+        + a2.mul_exact(w2_re / 2, w2_im / 2)
+        + k_interval.mul_exact(S_RE, S_IM)
     )
-    i_re = i_re.widen(TAIL)
-    i_im = i_im.widen(TAIL)
 
-    re_target = Interval(
-        Fraction(60244919323019, 10**14),
-        Fraction(60244919323024, 10**14),
-    )
-    im_target = Interval(
-        Fraction(-96776228196568, 10**14),
-        Fraction(-96776228196563, 10**14),
-    )
-    assert re_target.lo < i_re.lo and i_re.hi < re_target.hi
-    assert im_target.lo < i_im.lo and i_im.hi < im_target.hi
-    print(f"PASS Re I_alpha enclosure: {interval_dec(i_re)}")
-    print(f"PASS Im I_alpha enclosure: {interval_dec(i_im)}")
-
-    log2 = log2_interval()
-    e_lower = exp_neg_interval(log2.scale(A)).lo
-    s_a = finite_sum_a()
-    i_a_lower = e_lower * s_a
-    i_a_threshold = Fraction(15099327306413, 10**13)
-    assert i_a_lower > i_a_threshold
-    print(
-        "PASS I_a lower bound: "
-        f"certified lower bound = {dec(i_a_lower, 45)}"
-    )
-    return i_re, i_im, i_a_lower
+    y2_upper = norm_square_upper(y)
+    lower = C * C * d_lower * d_lower
+    assert y2_upper < lower
+    print(f"PASS Y enclosure: Re {interval_dec(y.re)}, Im {interval_dec(y.im)}")
+    print(f"PASS |Y|^2 upper bound: {dec(y2_upper, 45)}")
+    print(f"PASS C^2 D^2 lower bound: {dec(lower, 45)}")
+    print(f"PASS comparison gap: {dec(lower - y2_upper, 45)}")
 
 
-def corner_value(x: Fraction, y: Fraction) -> Fraction:
-    u = S_RE
-    v = S_IM_ABS
-    return (1 + u * x + v * y) ** 2 + (u * y - v * x) ** 2
-
-
-def verify_corners() -> Fraction:
-    xs = [
-        Fraction(60244919323019, 10**14),
-        Fraction(60244919323024, 10**14),
-    ]
-    ys = [
-        Fraction(-96776228196568, 10**14),
-        Fraction(-96776228196563, 10**14),
-    ]
-    values = [corner_value(x, y) for x in xs for y in ys]
-    max_corner = max(values)
-    upper = Fraction(1097056313558, 10**12)
-    assert all(value < upper for value in values)
-    print(
-        "PASS four-corner upper bound: "
-        f"max corner = {dec(max_corner, 45)}"
-    )
-    return max_corner
-
-
-def verify_lower_comparison() -> Fraction:
-    i_a_floor = Fraction(15099327306413, 10**13)
-    lower = C * C * i_a_floor * i_a_floor
-    target = Fraction(1097056314748, 10**12)
-    assert lower > target
-    print(
-        "PASS C^2 I_a^2 lower bound: "
-        f"C^2*(1.5099327306413)^2 = {dec(lower, 45)}"
-    )
-    return lower
-
-
-def verify_final(max_corner: Fraction, lower: Fraction) -> None:
-    upper_corner = Fraction(1097056313558, 10**12)
-    lower_target = Fraction(1097056314748, 10**12)
-    assert max_corner < upper_corner < lower_target < lower
-    print(
-        "PASS comparison gap: "
-        f"1.097056314748 - 1.097056313558 = "
-        f"{dec(lower_target - upper_corner, 30)}"
-    )
-    assert C < Fraction(69368, 100000)
-    print("PASS final certified bound C = 0.6936763075 < 0.69368")
+def verify_final_bound() -> None:
+    assert C < PUBLIC_BOUND
+    print("PASS final certified bound C = 0.6906538 < 0.69368")
 
 
 def main() -> None:
     verify_radius()
-    verify_tail()
-    verify_integrals()
-    max_corner = verify_corners()
-    lower = verify_lower_comparison()
-    verify_final(max_corner, lower)
+    k_interval, d_lower, a1_interval, a2 = verify_integrals()
+    verify_main_inequality(k_interval, d_lower, a1_interval, a2)
+    verify_final_bound()
 
 
 if __name__ == "__main__":
