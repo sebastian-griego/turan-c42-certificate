@@ -16,7 +16,7 @@ from functools import lru_cache
 DEN = 10**8
 TAU = Fraction(36988243, DEN)
 L = 1 - 2 * TAU
-BETA_END = 1 - TAU
+ONE_MINUS_TAU = 1 - TAU
 
 ALPHA_RE = Fraction(61927309, DEN)
 ALPHA_IM = Fraction(57623741, DEN)
@@ -33,10 +33,19 @@ W_IM = ETA_IM - S_IM
 C = Fraction(3453269, 5000000)
 PUBLIC_BOUND = Fraction(69368, 100000)
 
-N_I = 90
-N_A2 = 80
-LOG_TERMS = 45
-TAYLOR_TERMS = 35
+# Number of terms retained from I_A(x) = sum x^{A+r}/(A+r).
+I_SERIES_TERMS = 90
+
+# Number of terms retained from the A_2 coefficient series.
+A2_SERIES_TERMS = 80
+
+# Number of terms in the atanh series used to enclose logarithms.
+LOG_SERIES_TERMS = 45
+
+# Number of alternating Taylor terms used for exp(-x), sin(x), and cos(x).
+TAYLOR_SERIES_TERMS = 35
+
+# Every interval operation is rounded outward to this denominator.
 ROUND_DEN = 10**60
 
 
@@ -130,7 +139,13 @@ def interval_dec(x: Interval, prec: int = 45) -> str:
     return f"[{dec(x.lo, prec)}, {dec(x.hi, prec)}]"
 
 
-def log_near_one_interval(x: Fraction, terms: int = LOG_TERMS) -> Interval:
+def sci(q: Fraction, places: int = 16) -> str:
+    getcontext().prec = places + 5
+    value = Decimal(q.numerator) / Decimal(q.denominator)
+    return f"{value:.{places}E}"
+
+
+def log_near_one_interval(x: Fraction, terms: int = LOG_SERIES_TERMS) -> Interval:
     """Enclose log(x) using 2 atanh((x-1)/(x+1))."""
     y = (x - 1) / (x + 1)
     partial = Fraction(0)
@@ -145,7 +160,7 @@ def log_near_one_interval(x: Fraction, terms: int = LOG_TERMS) -> Interval:
 
 @lru_cache(maxsize=None)
 def log2_interval() -> Interval:
-    return log_near_one_interval(Fraction(2), LOG_TERMS)
+    return log_near_one_interval(Fraction(2), LOG_SERIES_TERMS)
 
 
 @lru_cache(maxsize=None)
@@ -160,14 +175,14 @@ def log_interval(x: Fraction) -> Interval:
         z /= 2
         shift -= 1
 
-    near = log_near_one_interval(z, LOG_TERMS)
+    near = log_near_one_interval(z, LOG_SERIES_TERMS)
     if shift == 0:
         return near
     return near - log2_interval().scale(shift)
 
 
 @lru_cache(maxsize=None)
-def exp_neg_point_interval(x: Fraction, terms: int = TAYLOR_TERMS) -> Interval:
+def exp_neg_point_interval(x: Fraction, terms: int = TAYLOR_SERIES_TERMS) -> Interval:
     # e^{-x} = 1 - x + x^2/2! - ... . Here 0 < x < 1.
     assert 0 <= x < 1
     term = Fraction(1)
@@ -188,7 +203,8 @@ def exp_neg_point_interval(x: Fraction, terms: int = TAYLOR_TERMS) -> Interval:
 
 
 def exp_neg_interval(x: Interval) -> Interval:
-    # e^{-x} is decreasing.
+    # These calls come from x^{-a} with 0 < x < 1 and 0 < a < 1, so
+    # 0 <= -a log(x) < 1. On this interval e^{-x} is decreasing.
     assert 0 <= x.lo <= x.hi < 1
     lower = exp_neg_point_interval(x.hi).lo
     upper = exp_neg_point_interval(x.lo).hi
@@ -196,7 +212,7 @@ def exp_neg_interval(x: Interval) -> Interval:
 
 
 @lru_cache(maxsize=None)
-def cos_point_interval(x: Fraction, terms: int = TAYLOR_TERMS) -> Interval:
+def cos_point_interval(x: Fraction, terms: int = TAYLOR_SERIES_TERMS) -> Interval:
     # cos(x) = 1 - x^2/2! + x^4/4! - ... . Here 0 <= x < 1.
     assert 0 <= x < 1
     x2 = x * x
@@ -218,7 +234,7 @@ def cos_point_interval(x: Fraction, terms: int = TAYLOR_TERMS) -> Interval:
 
 
 @lru_cache(maxsize=None)
-def sin_point_interval(x: Fraction, terms: int = TAYLOR_TERMS) -> Interval:
+def sin_point_interval(x: Fraction, terms: int = TAYLOR_SERIES_TERMS) -> Interval:
     # sin(x) = x - x^3/3! + x^5/5! - ... . Here 0 <= x < 1.
     assert 0 <= x < 1
     x2 = x * x
@@ -236,27 +252,30 @@ def sin_point_interval(x: Fraction, terms: int = TAYLOR_TERMS) -> Interval:
             partial += term
             upper = partial
     assert lower is not None
-    return Interval(lower, upper)
+    return enclose(lower, upper)
 
 
 def cos_interval(theta: Interval) -> Interval:
-    # All calls are inside (-1, 0), so use evenness and monotonicity.
+    # These calls come from b log(x) with 0 < x < 1 and 0 < b < 1.
+    # In this certificate they all lie in (-1, 0), so use evenness and
+    # monotonicity of cos on (0, 1).
     assert -1 < theta.lo <= theta.hi <= 0
     abs_lo = -theta.hi
     abs_hi = -theta.lo
     lower = cos_point_interval(abs_hi).lo
     upper = cos_point_interval(abs_lo).hi
-    return Interval(lower, upper)
+    return enclose(lower, upper)
 
 
 def sin_interval(theta: Interval) -> Interval:
-    # All calls are inside (-1, 0), where sin is increasing.
+    # These calls come from b log(x) with 0 < x < 1 and 0 < b < 1.
+    # In this certificate they all lie in (-1, 0), where sin is increasing.
     assert -1 < theta.lo <= theta.hi <= 0
     abs_lo = -theta.hi
     abs_hi = -theta.lo
     lower = -sin_point_interval(abs_hi).hi
     upper = -sin_point_interval(abs_lo).lo
-    return Interval(lower, upper)
+    return enclose(lower, upper)
 
 
 @lru_cache(maxsize=None)
@@ -279,7 +298,7 @@ def reciprocal_alpha_plus(r: int) -> tuple[Fraction, Fraction]:
     return re / den, -im / den
 
 
-def finite_i_alpha_sum(x: Fraction, terms: int = N_I) -> tuple[Fraction, Fraction]:
+def finite_i_alpha_sum(x: Fraction, terms: int = I_SERIES_TERMS) -> tuple[Fraction, Fraction]:
     total_re = Fraction(0)
     total_im = Fraction(0)
     x_power = Fraction(1)
@@ -291,7 +310,7 @@ def finite_i_alpha_sum(x: Fraction, terms: int = N_I) -> tuple[Fraction, Fractio
     return total_re, total_im
 
 
-def finite_i_a_sum(x: Fraction, terms: int = N_I) -> Fraction:
+def finite_i_a_sum(x: Fraction, terms: int = I_SERIES_TERMS) -> Fraction:
     total = Fraction(0)
     x_power = Fraction(1)
     for r in range(terms):
@@ -300,40 +319,43 @@ def finite_i_a_sum(x: Fraction, terms: int = N_I) -> Fraction:
     return total
 
 
-def i_alpha_tail_bound(x: Fraction, terms: int = N_I) -> Fraction:
+def i_alpha_tail_bound(x: Fraction, terms: int = I_SERIES_TERMS) -> Fraction:
     xa_upper = x_to_a_interval(x).hi
     return xa_upper * x**terms / ((A + terms) * (1 - x))
 
 
-def i_alpha_interval(x: Fraction, terms: int = N_I) -> ComplexInterval:
+def i_alpha_interval(x: Fraction, terms: int = I_SERIES_TERMS) -> ComplexInterval:
     power = x_to_alpha_interval(x)
     sum_re, sum_im = finite_i_alpha_sum(x, terms)
     value = power.mul_exact(sum_re, sum_im)
     return value.widen(i_alpha_tail_bound(x, terms))
 
 
-def i_a_lower(x: Fraction, terms: int = N_I) -> Fraction:
-    return x_to_a_interval(x).lo * finite_i_a_sum(x, terms)
+def i_a_lower(x: Fraction, terms: int = I_SERIES_TERMS) -> Fraction:
+    return round_down(x_to_a_interval(x).lo * finite_i_a_sum(x, terms))
 
 
 def a2_tail_bound(log_ratio_upper: Fraction, l_to_a_upper: Fraction) -> Fraction:
-    m = N_A2
+    # This implements
+    # 2 L^a/(a+N) * (log(B/tau) L^N/(1-L)
+    #     + (L/B)^N / ((1-B)(1-L/B))).
+    m = A2_SERIES_TERMS
     first = log_ratio_upper * L**m / (1 - L)
-    ratio = L / BETA_END
-    second = ratio**m / ((1 - BETA_END) * (1 - ratio))
+    ratio = L / ONE_MINUS_TAU
+    second = ratio**m / ((1 - ONE_MINUS_TAU) * (1 - ratio))
     return 2 * l_to_a_upper * (first + second) / (A + m)
 
 
 def a2_interval() -> ComplexInterval:
-    log_ratio = log_interval(BETA_END / TAU)
+    log_ratio = log_interval(ONE_MINUS_TAU / TAU)
     l_alpha = x_to_alpha_interval(L)
     total = ComplexInterval.point(0)
     harmonic = Fraction(0)
     l_power = Fraction(1)
 
-    for m in range(N_A2):
+    for m in range(A2_SERIES_TERMS):
         if m > 0:
-            harmonic += Fraction(1, m) / (BETA_END**m)
+            harmonic += Fraction(1, m) / (ONE_MINUS_TAU**m)
         coeff = log_ratio - Interval.point(harmonic)
         inv_re, inv_im = reciprocal_alpha_plus(m)
         term = l_alpha.scale(l_power).mul_exact(inv_re, inv_im).scale_interval(coeff).scale(2)
@@ -365,7 +387,7 @@ def verify_radius() -> None:
 
 def verify_integrals() -> tuple[ComplexInterval, Fraction, ComplexInterval, ComplexInterval]:
     k_interval = i_alpha_interval(TAU)
-    i_alpha_b = i_alpha_interval(BETA_END)
+    i_alpha_b = i_alpha_interval(ONE_MINUS_TAU)
     a1_interval = i_alpha_b - k_interval
     d_lower = i_a_lower(TAU)
     a2 = a2_interval()
@@ -396,10 +418,11 @@ def verify_main_inequality(
     y2_upper = norm_square_upper(y)
     lower = C * C * d_lower * d_lower
     assert y2_upper < lower
+    gap = lower - y2_upper
     print(f"PASS Y enclosure: Re {interval_dec(y.re)}, Im {interval_dec(y.im)}")
     print(f"PASS |Y|^2 upper bound: {dec(y2_upper, 45)}")
     print(f"PASS C^2 D^2 lower bound: {dec(lower, 45)}")
-    print(f"PASS comparison gap: {dec(lower - y2_upper, 45)}")
+    print(f"PASS comparison gap: {sci(gap)}; exact rational = {gap}")
 
 
 def verify_final_bound() -> None:

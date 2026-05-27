@@ -2,13 +2,31 @@
 
 ## 1. Statement of the bound
 
-This note records a proposed two-block certificate for the upper bound
+This note records a proposed asymptotic two-block certificate for the upper
+bound
 
 $$
 \limsup_{n\to\infty} R_n \le 0.6906538 < 0.69368.
 $$
 
-The number `0.69368` is the current public upper bound being improved.
+For $n\ge1$, let
+
+$$
+R_n=
+\min_{\max_i |z_i|=1}
+\max_{1\le k\le n}
+\left|\sum_{i=1}^n z_i^k\right|,
+$$
+
+where the minimum is over $z_1,\dots,z_n\in\mathbb C$. The constant considered
+here is
+
+$$
+C_{42}=\limsup_{n\to\infty} R_n.
+$$
+
+The number `0.69368` is the current public upper bound being improved. The
+proof is asymptotic; it does not provide an explicit finite threshold $N$.
 
 ## 2. Parameters
 
@@ -150,6 +168,66 @@ c_m=
 \sum_{q=1}^m\frac{1}{qB^q}.
 $$
 
+To obtain the series, note that $0\le u\le L=1-2\tau<B=1-\tau$. Hence
+
+$$
+\log\left(\frac{B-u}{\tau}\right)
+=
+\log\left(\frac B\tau\right)
++
+\log\left(1-\frac uB\right)
+=
+\log\left(\frac B\tau\right)
+-
+\sum_{q\ge1}\frac{u^q}{qB^q}.
+$$
+
+Also
+
+$$
+\frac1{1-u}=\sum_{r\ge0}u^r.
+$$
+
+Thus
+
+$$
+\frac1{1-u}
+\log\left(\frac{B-u}{\tau}\right)
+=
+\sum_{m\ge0}c_m u^m,
+$$
+
+with the coefficients above. Termwise integration gives the displayed series
+for $A_2$.
+
+For $m\ge N$,
+
+$$
+|c_m|
+\le
+\log\frac B\tau+\sum_{q=1}^m B^{-q}
+\le
+\log\frac B\tau+\frac{B^{-m}}{1-B}.
+$$
+
+Therefore
+
+$$
+\left|
+2\sum_{m\ge N}c_m\frac{L^{\alpha+m}}{\alpha+m}
+\right|
+\le
+\frac{2L^a}{a+N}
+\left(
+\log\frac B\tau\frac{L^N}{1-L}
++
+\frac{(L/B)^N}{(1-B)(1-L/B)}
+\right),
+$$
+
+where $a=\operatorname{Re}\alpha$. This is the tail bound implemented in the
+exact verifier.
+
 The rational interval checker certifies the following enclosures:
 
 $$
@@ -241,6 +319,21 @@ $$
 |Y|<CD.
 $$
 
+The limiting slack is small but strict. Numerically,
+
+$$
+\frac{|Y|}{D}\approx0.690653695151631,
+$$
+
+so
+
+$$
+C-\frac{|Y|}{D}\approx1.05\cdot10^{-7}.
+$$
+
+The proof does not rely on this decimal approximation. The strict comparison
+is certified by the rational interval verifier through $|Y|^2<C^2D^2$.
+
 ## 5. Construction
 
 For $l\ge0$, define
@@ -275,7 +368,7 @@ B_n=\{1,\dots,A_n\},
 $$
 
 $$
-M_n=\{A_n+1,\dots,n-A_n-1\},
+J_n=\{A_n+1,\dots,n-A_n-1\},
 $$
 
 and
@@ -290,7 +383,7 @@ $$
 S_k=s=1-\alpha.
 $$
 
-For $k\in M_n$, set
+For $k\in J_n$, set
 
 $$
 S_k=\eta.
@@ -307,10 +400,10 @@ Define
 $$
 Y_n=
 n\beta_n
--nw\sum_{m\in M_n}\frac{\beta_{n-m}}{m}
+-nw\sum_{m\in J_n}\frac{\beta_{n-m}}{m}
 +
 \frac{nw^2}{2}
-\sum_{\substack{m_1,m_2\in M_n\\m_1+m_2\le n}}
+\sum_{\substack{m_1,m_2\in J_n\\m_1+m_2\le n}}
 \frac{\beta_{n-m_1-m_2}}{m_1m_2}
 +
 s\sum_{m\in F_n}P_m.
@@ -378,16 +471,16 @@ Let $y_2,\dots,y_n$ be the roots of $p_n$, counted with multiplicity, and put
 $y_1=1$. Let
 
 $$
-M_n=\max_{1\le j\le n}|y_j|,
+\Lambda_n=\max_{1\le j\le n}|y_j|,
 $$
 
 and
 
 $$
-z_j^{(n)}=\frac{y_j}{M_n}.
+z_j^{(n)}=\frac{y_j}{\Lambda_n}.
 $$
 
-Since $y_1=1$, we have $M_n\ge1$, and therefore
+Since $y_1=1$, we have $\Lambda_n\ge1$, and therefore
 
 $$
 \max_j |z_j^{(n)}|=1.
@@ -425,10 +518,10 @@ Therefore
 $$
 b_n=
 \beta_n
--w\sum_{m\in M_n}\frac{\beta_{n-m}}{m}
+-w\sum_{m\in J_n}\frac{\beta_{n-m}}{m}
 +
 \frac{w^2}{2}
-\sum_{\substack{m_1,m_2\in M_n\\m_1+m_2\le n}}
+\sum_{\substack{m_1,m_2\in J_n\\m_1+m_2\le n}}
 \frac{\beta_{n-m_1-m_2}}{m_1m_2}
 -
 \sum_{m\in F_n}
@@ -445,24 +538,38 @@ is exactly the condition $b_n=0$.
 
 ## 8. Proof of the asymptotic condition
 
-The only remaining point is the eventual inequality
+Let
 
 $$
-|Y_n|
-\le
-C\sum_{m\in F_n}|P_m|.
+a=\operatorname{Re}\alpha>0,
+\qquad
+A_n=\lfloor \tau n\rfloor,
 $$
 
-Using
+and write
+
+$$
+J_n=\{A_n+1,\dots,n-A_n-1\},
+\qquad
+F_n=\{n-A_n,\dots,n\}.
+$$
+
+We use the standard estimate
 
 $$
 \beta_l=
 \frac{\Gamma(l+\alpha)}{\Gamma(\alpha)\Gamma(l+1)}
 =
-\frac{l^{\alpha-1}}{\Gamma(\alpha)}(1+o(1)),
+\frac{l^{\alpha-1}}{\Gamma(\alpha)}\left(1+O(l^{-1})\right)
 $$
 
-one obtains the limits
+as $l\to\infty$. The estimate is uniform on ranges $l\ge\varepsilon n$,
+where $\varepsilon>0$ is fixed. On ranges touching $l=0$, the endpoint is
+handled by first truncating to $l\ge L_0$, applying the uniform estimate, and
+then letting $L_0\to\infty$. This is valid because $a>0$, so $u^{a-1}$ is
+integrable at $u=0$.
+
+The following limits hold:
 
 $$
 \Gamma(\alpha)n^{1-\alpha}\beta_n\to1,
@@ -470,32 +577,103 @@ $$
 
 $$
 \Gamma(\alpha)n^{1-\alpha}
-\sum_{m\in M_n}\frac{\beta_{n-m}}{m}
-\to A_1,
-$$
-
-$$
-\Gamma(\alpha)n^{1-\alpha}
-\sum_{\substack{m_1,m_2\in M_n\\m_1+m_2\le n}}
-\frac{\beta_{n-m_1-m_2}}{m_1m_2}
-\to A_2,
+\sum_{m\in J_n}\frac{\beta_{n-m}}{m}
+\to
+\int_\tau^{1-\tau}\frac{u^{\alpha-1}}{1-u}\,du
+=A_1,
 $$
 
 $$
 \Gamma(\alpha)n^{1-\alpha}
 \sum_{m\in F_n}\frac{\beta_{n-m}}{m}
-\to K,
+\to
+\int_0^\tau\frac{u^{\alpha-1}}{1-u}\,du
+=K,
 $$
 
 and
 
 $$
-|\Gamma(\alpha)|n^{1-\operatorname{Re}\alpha}
+|\Gamma(\alpha)|n^{1-a}
 \sum_{m\in F_n}\frac{|\beta_{n-m}|}{m}
+\to
+\int_0^\tau\frac{u^{a-1}}{1-u}\,du
+=D.
+$$
+
+For the double sum, group terms by
+
+$$
+l=n-m_1-m_2.
+$$
+
+Then $0\le l\le n-2A_n-2$, and
+
+$$
+\sum_{\substack{m_1,m_2\in J_n\\m_1+m_2=n-l}}
+\frac{1}{m_1m_2}
+=
+\sum_{m=A_n+1}^{n-l-A_n-1}
+\frac{1}{m(n-l-m)}.
+$$
+
+By partial fractions,
+
+$$
+\sum_{m=A_n+1}^{n-l-A_n-1}
+\frac{1}{m(n-l-m)}
+=
+\frac{2}{n-l}
+\sum_{m=A_n+1}^{n-l-A_n-1}
+\frac{1}{m}.
+$$
+
+If $l/n\to u$, with $0\le u\le1-2\tau$, then
+
+$$
+n
+\sum_{m=A_n+1}^{n-l-A_n-1}
+\frac{1}{m(n-l-m)}
+\to
+\frac{2}{1-u}
+\log\left(\frac{1-\tau-u}{\tau}\right).
+$$
+
+Therefore
+
+$$
+\Gamma(\alpha)n^{1-\alpha}
+\sum_{\substack{m_1,m_2\in J_n\\m_1+m_2\le n}}
+\frac{\beta_{n-m_1-m_2}}{m_1m_2}
+\to
+2\int_0^{1-2\tau}
+\frac{u^{\alpha-1}}{1-u}
+\log\left(\frac{1-\tau-u}{\tau}\right)\,du
+=A_2.
+$$
+
+The changes caused by replacing $\tau n$ with $\lfloor\tau n\rfloor$ affect
+only $O(1)$ boundary terms. After the normalizations above, those boundary
+contributions are $o(1)$.
+
+It follows that
+
+$$
+\Gamma(\alpha)n^{-\alpha}Y_n
+\to
+1-wA_1+\frac{w^2}{2}A_2+sK
+=Y,
+$$
+
+and
+
+$$
+|\Gamma(\alpha)|n^{-a}
+\sum_{m\in F_n}|P_m|
 \to D.
 $$
 
-Consequently,
+Consequently
 
 $$
 \frac{|Y_n|}{\sum_{m\in F_n}|P_m|}
@@ -503,8 +681,8 @@ $$
 \frac{|Y|}{D}.
 $$
 
-The certified inequality $|Y|<CD$ therefore implies that, for all sufficiently
-large $n$,
+Since the certified computation proves $|Y|<CD$, there exists $N$ such that
+for all $n\ge N$,
 
 $$
 |Y_n|
@@ -542,10 +720,10 @@ for $1\le k\le n$. Therefore
 $$
 \sum_{j=1}^n (z_j^{(n)})^k
 =
-M_n^{-k}S_k.
+\Lambda_n^{-k}S_k.
 $$
 
-Since $M_n\ge1$ and $|S_k|\le C$,
+Since $\Lambda_n\ge1$ and $|S_k|\le C$,
 
 $$
 \left|
@@ -573,6 +751,12 @@ arithmetic in
 
 ```text
 scripts/verify_42a_certificate.py
+```
+
+A transcript is included at
+
+```text
+certificate/verify_42a_certificate.output.txt
 ```
 
 The high-precision mpmath script
