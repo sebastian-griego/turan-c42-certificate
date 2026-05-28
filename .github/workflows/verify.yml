@@ -30,3 +30,9 @@ jobs:
         run: |
           python3 -m pip install mpmath
           python3 scripts/numeric_sanity_check.py
+
+      - name: Regenerate certificate files
+        run: python3 scripts/export_42a_certificate.py
+
+      - name: Check certificate files are reproducible
+        run: git diff --exit-code certificate

@@ -2,84 +2,61 @@
 
 ## Claim
 
-The package claims the asymptotic upper bound
+This package proposes the asymptotic upper bound
 
 $$
 C_{42}\le 0.6906538.
 $$
 
-The proof is asymptotic and does not provide an explicit finite threshold.
+The proof is asymptotic and does not supply an explicit finite threshold.
 
-## Constants
+## Machine-checked limiting certificate
 
-The construction uses
+The exact verifier checks
 
 $$
-\tau=\frac{36988243}{10^8},
+|1-\alpha|<C,
 \qquad
-\alpha=\frac{61927309+57623741i}{10^8},
+|\eta|<C,
 \qquad
-\eta=\frac{59839764-34485185i}{10^8},
-$$
-
-$$
-s=1-\alpha=\frac{38072691-57623741i}{10^8},
+|Y|<CD,
 \qquad
-w=\eta-s=\frac{21767073+23138556i}{10^8},
+C<0.69368.
 $$
 
-and
+The main inequality is checked as
 
 $$
-C=\frac{3453269}{5000000}=0.6906538.
+|Y|^2<C^2D^2
 $$
 
-## Computational certificate
+using exact rational interval arithmetic.
 
-The exact verifier proves
+## Prose mathematical reduction
 
-$$
-|1-\alpha|<C,\qquad |\eta|<C,\qquad |Y|<CD,\qquad C<0.69368.
-$$
+The following steps are proved in the note rather than formalized by the
+verifier:
 
-It does this using exact integer arithmetic and outward-rounded rational
-interval arithmetic. The exact verifier is
-
-```text
-scripts/verify_42a_certificate.py
-```
-
-and a transcript is recorded in
-
-```text
-certificate/verify_42a_certificate.output.txt
-```
-
-## Mathematical reduction
-
-The writeup proves that the finite construction has prescribed power sums
-$S_k$, that $b_n=0$, and that the limiting inequality $|Y|<CD$ implies
-
-$$
-|Y_n|\le C\sum_{m\in F_n}|P_m|
-$$
-
-for all sufficiently large $n$.
-
-## Known limitations
-
-No explicit threshold $N$ is provided. The proof is asymptotic. The exact
-verifier checks the limiting numerical certificate, not the full asymptotic
-proof in a formal proof assistant.
-
-An independent ball-arithmetic verifier is not included yet. A useful future
-check would recompute $K$, $D$, $A_1$, and $A_2$ using independent interval or
-ball arithmetic, preferably without sharing the custom rational interval code.
+1. coefficient asymptotic for $\beta_l=(\alpha)_l/l!$,
+2. Riemann-sum limits for $K$, $D$, $A_1$, and $A_2$,
+3. endpoint truncation near $l=0$,
+4. harmlessness of $A_n=\lfloor\tau n\rfloor$,
+5. generating-function derivation of $b_n=0$,
+6. Newton identity step producing prescribed power sums,
+7. final-block convex combination argument.
 
 ## Suggested reviewer checks
 
-1. Verify the generating-function derivation of $b_n$.
-2. Check the sign and factor $2$ in the double-sum limit.
-3. Check the endpoint and floor-error arguments.
-4. Run the exact verifier.
-5. Optionally add or run an independent ball-arithmetic verifier.
+- Check the sign convention in the generating function.
+- Check the factor $2$ in the double-sum limit defining $A_2$.
+- Check the endpoint and floor-error estimates.
+- Run the exact verifier.
+- Regenerate the certificate and check that there is no diff.
+- Optionally run the Sage exported-certificate consistency checker.
+
+## Known limitations
+
+- No explicit finite $N$ is supplied.
+- The proof is asymptotic.
+- The exact verifier checks the limiting numerical certificate, not a
+  proof-assistant formalization of the asymptotic reduction.

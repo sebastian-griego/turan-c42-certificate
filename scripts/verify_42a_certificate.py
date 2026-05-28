@@ -17,11 +17,14 @@ DEN = 10**8
 TAU = Fraction(36988243, DEN)
 L = 1 - 2 * TAU
 ONE_MINUS_TAU = 1 - TAU
+TAU_TEXT = "36988243/100000000"
 
 ALPHA_RE = Fraction(61927309, DEN)
 ALPHA_IM = Fraction(57623741, DEN)
 A = ALPHA_RE
 B = ALPHA_IM
+ALPHA_RE_TEXT = "61927309/100000000"
+ALPHA_IM_TEXT = "57623741/100000000"
 
 S_RE = 1 - ALPHA_RE
 S_IM = -ALPHA_IM
@@ -29,9 +32,17 @@ ETA_RE = Fraction(59839764, DEN)
 ETA_IM = Fraction(-34485185, DEN)
 W_RE = ETA_RE - S_RE
 W_IM = ETA_IM - S_IM
+S_RE_TEXT = "38072691/100000000"
+S_IM_TEXT = "-57623741/100000000"
+ETA_RE_TEXT = "59839764/100000000"
+ETA_IM_TEXT = "-34485185/100000000"
+W_RE_TEXT = "21767073/100000000"
+W_IM_TEXT = "23138556/100000000"
 
 C = Fraction(3453269, 5000000)
 PUBLIC_BOUND = Fraction(69368, 100000)
+C_TEXT = "3453269/5000000"
+PUBLIC_BOUND_TEXT = "69368/100000"
 
 # Number of terms retained from I_A(x) = sum x^{A+r}/(A+r).
 I_SERIES_TERMS = 90
@@ -53,12 +64,12 @@ class CertificateError(RuntimeError):
     pass
 
 
-def require(condition: bool, message: str) -> None:
+def check(condition: bool, message: str) -> None:
     if not condition:
         raise CertificateError(message)
 
 
-def require_equal(actual: object, expected: object, label: str) -> None:
+def check_equal(actual: object, expected: object, label: str) -> None:
     if actual != expected:
         raise CertificateError(f"{label}: expected {expected}, got {actual}")
 
@@ -159,11 +170,28 @@ def sci(q: Fraction, places: int = 16) -> str:
     return f"{value:.{places}E}"
 
 
+def fraction_str(q: Fraction) -> str:
+    return str(q)
+
+
+def interval_json(x: Interval) -> list[str]:
+    return [fraction_str(x.lo), fraction_str(x.hi)]
+
+
+def complex_interval_json(z: ComplexInterval) -> dict[str, list[str]]:
+    return {"re": interval_json(z.re), "im": interval_json(z.im)}
+
+
+def emit(verbose: bool, message: str) -> None:
+    if verbose:
+        print(message)
+
+
 def log_near_one_interval(x: Fraction, terms: int = LOG_SERIES_TERMS) -> Interval:
     """Enclose log(x) using 2 atanh((x-1)/(x+1))."""
-    require(x > 0, f"log_near_one_interval expected x > 0, got {x}")
+    check(x > 0, f"log_near_one_interval expected x > 0, got {x}")
     y = (x - 1) / (x + 1)
-    require(abs(y) < 1, f"atanh log transform expected |y| < 1, got {y}")
+    check(abs(y) < 1, f"atanh log transform expected |y| < 1, got {y}")
     partial = Fraction(0)
     y_power = y
     y2 = y * y
@@ -182,7 +210,7 @@ def log2_interval() -> Interval:
 @lru_cache(maxsize=None)
 def log_interval(x: Fraction) -> Interval:
     """Enclose log(x), reducing by powers of two before using atanh."""
-    require(x > 0, f"log_interval expected x > 0, got {x}")
+    check(x > 0, f"log_interval expected x > 0, got {x}")
     z = x
     shift = 0
     while z < Fraction(2, 3):
@@ -201,7 +229,7 @@ def log_interval(x: Fraction) -> Interval:
 @lru_cache(maxsize=None)
 def exp_neg_point_interval(x: Fraction, terms: int = TAYLOR_SERIES_TERMS) -> Interval:
     # e^{-x} = 1 - x + x^2/2! - ... . Here 0 < x < 1.
-    require(0 <= x < 1, f"exp_neg_point_interval expected 0 <= x < 1, got {x}")
+    check(0 <= x < 1, f"exp_neg_point_interval expected 0 <= x < 1, got {x}")
     term = Fraction(1)
     partial = Fraction(1)
     lower = None
@@ -215,14 +243,14 @@ def exp_neg_point_interval(x: Fraction, terms: int = TAYLOR_SERIES_TERMS) -> Int
         else:
             partial += term
             upper = partial
-    require(lower is not None, "exp_neg_point_interval did not produce a lower bound")
+    check(lower is not None, "exp_neg_point_interval did not produce a lower bound")
     return enclose(lower, upper)
 
 
 def exp_neg_interval(x: Interval) -> Interval:
     # These calls come from x^{-a} with 0 < x < 1 and 0 < a < 1, so
     # 0 <= -a log(x) < 1. On this interval e^{-x} is decreasing.
-    require(0 <= x.lo <= x.hi < 1, f"exp_neg_interval expected 0 <= lo <= hi < 1, got {x}")
+    check(0 <= x.lo <= x.hi < 1, f"exp_neg_interval expected 0 <= lo <= hi < 1, got {x}")
     lower = exp_neg_point_interval(x.hi).lo
     upper = exp_neg_point_interval(x.lo).hi
     return enclose(lower, upper)
@@ -231,7 +259,7 @@ def exp_neg_interval(x: Interval) -> Interval:
 @lru_cache(maxsize=None)
 def cos_point_interval(x: Fraction, terms: int = TAYLOR_SERIES_TERMS) -> Interval:
     # cos(x) = 1 - x^2/2! + x^4/4! - ... . Here 0 <= x < 1.
-    require(0 <= x < 1, f"cos_point_interval expected 0 <= x < 1, got {x}")
+    check(0 <= x < 1, f"cos_point_interval expected 0 <= x < 1, got {x}")
     x2 = x * x
     term = Fraction(1)
     partial = Fraction(1)
@@ -246,14 +274,14 @@ def cos_point_interval(x: Fraction, terms: int = TAYLOR_SERIES_TERMS) -> Interva
         else:
             partial += term
             upper = partial
-    require(lower is not None, "cos_point_interval did not produce a lower bound")
+    check(lower is not None, "cos_point_interval did not produce a lower bound")
     return enclose(lower, upper)
 
 
 @lru_cache(maxsize=None)
 def sin_point_interval(x: Fraction, terms: int = TAYLOR_SERIES_TERMS) -> Interval:
     # sin(x) = x - x^3/3! + x^5/5! - ... . Here 0 <= x < 1.
-    require(0 <= x < 1, f"sin_point_interval expected 0 <= x < 1, got {x}")
+    check(0 <= x < 1, f"sin_point_interval expected 0 <= x < 1, got {x}")
     x2 = x * x
     term = x
     partial = x
@@ -268,7 +296,7 @@ def sin_point_interval(x: Fraction, terms: int = TAYLOR_SERIES_TERMS) -> Interva
         else:
             partial += term
             upper = partial
-    require(lower is not None, "sin_point_interval did not produce a lower bound")
+    check(lower is not None, "sin_point_interval did not produce a lower bound")
     return enclose(lower, upper)
 
 
@@ -276,7 +304,7 @@ def cos_interval(theta: Interval) -> Interval:
     # These calls come from b log(x) with 0 < x < 1 and 0 < b < 1.
     # In this certificate they all lie in (-1, 0), so use evenness and
     # monotonicity of cos on (0, 1).
-    require(-1 < theta.lo <= theta.hi <= 0, f"cos_interval expected -1 < lo <= hi <= 0, got {theta}")
+    check(-1 < theta.lo <= theta.hi <= 0, f"cos_interval expected -1 < lo <= hi <= 0, got {theta}")
     abs_lo = -theta.hi
     abs_hi = -theta.lo
     lower = cos_point_interval(abs_hi).lo
@@ -287,7 +315,7 @@ def cos_interval(theta: Interval) -> Interval:
 def sin_interval(theta: Interval) -> Interval:
     # These calls come from b log(x) with 0 < x < 1 and 0 < b < 1.
     # In this certificate they all lie in (-1, 0), where sin is increasing.
-    require(-1 < theta.lo <= theta.hi <= 0, f"sin_interval expected -1 < lo <= hi <= 0, got {theta}")
+    check(-1 < theta.lo <= theta.hi <= 0, f"sin_interval expected -1 < lo <= hi <= 0, got {theta}")
     abs_lo = -theta.hi
     abs_hi = -theta.lo
     lower = -sin_point_interval(abs_hi).hi
@@ -392,36 +420,37 @@ def norm_square_upper(z: ComplexInterval) -> Fraction:
     return max(vals)
 
 
-def verify_radius() -> None:
+def verify_radius(verbose: bool = True) -> tuple[Fraction, Fraction]:
     s_margin = C * C - (S_RE * S_RE + S_IM * S_IM)
     eta_margin = C * C - (ETA_RE * ETA_RE + ETA_IM * ETA_IM)
-    require_equal(
+    check_equal(
         s_margin,
         Fraction(693863919, 5000000000000000),
         "exact margin for |1-alpha| < C",
     )
-    require_equal(
+    check_equal(
         eta_margin,
         Fraction(1374484479, 10000000000000000),
         "exact margin for |eta| < C",
     )
-    require(s_margin > 0, "radius check failed for |1-alpha| < C")
-    require(eta_margin > 0, "radius check failed for |eta| < C")
-    print(f"PASS |1-alpha| < C: exact margin = {s_margin}")
-    print(f"PASS |eta| < C: exact margin = {eta_margin}")
+    check(s_margin > 0, "radius check failed for |1-alpha| < C")
+    check(eta_margin > 0, "radius check failed for |eta| < C")
+    emit(verbose, f"PASS |1-alpha| < C: exact margin = {s_margin}")
+    emit(verbose, f"PASS |eta| < C: exact margin = {eta_margin}")
+    return s_margin, eta_margin
 
 
-def verify_integrals() -> tuple[ComplexInterval, Fraction, ComplexInterval, ComplexInterval]:
+def verify_integrals(verbose: bool = True) -> tuple[ComplexInterval, Fraction, ComplexInterval, ComplexInterval]:
     k_interval = i_alpha_interval(TAU)
     i_alpha_b = i_alpha_interval(ONE_MINUS_TAU)
     a1_interval = i_alpha_b - k_interval
     d_lower = i_a_lower(TAU)
     a2 = a2_interval()
 
-    print(f"PASS K enclosure: Re {interval_dec(k_interval.re)}, Im {interval_dec(k_interval.im)}")
-    print(f"PASS D lower bound: D > {dec(d_lower, 45)}")
-    print(f"PASS A1 enclosure: Re {interval_dec(a1_interval.re)}, Im {interval_dec(a1_interval.im)}")
-    print(f"PASS A2 enclosure: Re {interval_dec(a2.re)}, Im {interval_dec(a2.im)}")
+    emit(verbose, f"PASS K enclosure: Re {interval_dec(k_interval.re)}, Im {interval_dec(k_interval.im)}")
+    emit(verbose, f"PASS D lower bound: D > {dec(d_lower, 45)}")
+    emit(verbose, f"PASS A1 enclosure: Re {interval_dec(a1_interval.re)}, Im {interval_dec(a1_interval.im)}")
+    emit(verbose, f"PASS A2 enclosure: Re {interval_dec(a2.re)}, Im {interval_dec(a2.im)}")
     return k_interval, d_lower, a1_interval, a2
 
 
@@ -430,7 +459,8 @@ def verify_main_inequality(
     d_lower: Fraction,
     a1_interval: ComplexInterval,
     a2: ComplexInterval,
-) -> None:
+    verbose: bool = True,
+) -> tuple[ComplexInterval, Fraction, Fraction, Fraction]:
     w2_re = W_RE * W_RE - W_IM * W_IM
     w2_im = 2 * W_RE * W_IM
 
@@ -443,28 +473,79 @@ def verify_main_inequality(
 
     y2_upper = norm_square_upper(y)
     lower = C * C * d_lower * d_lower
-    require(
+    check(
         y2_upper < lower,
         f"main inequality failed: |Y|^2 upper bound {y2_upper} "
         f"is not below C^2 D^2 lower bound {lower}",
     )
     gap = lower - y2_upper
-    print(f"PASS Y enclosure: Re {interval_dec(y.re)}, Im {interval_dec(y.im)}")
-    print(f"PASS |Y|^2 upper bound: {dec(y2_upper, 45)}")
-    print(f"PASS C^2 D^2 lower bound: {dec(lower, 45)}")
-    print(f"PASS comparison gap: {sci(gap)}; exact rational = {gap}")
+    emit(verbose, f"PASS Y enclosure: Re {interval_dec(y.re)}, Im {interval_dec(y.im)}")
+    emit(verbose, f"PASS |Y|^2 upper bound: {dec(y2_upper, 45)}")
+    emit(verbose, f"PASS C^2 D^2 lower bound: {dec(lower, 45)}")
+    emit(verbose, f"PASS comparison gap: {sci(gap)}; exact rational = {gap}")
+    return y, y2_upper, lower, gap
 
 
-def verify_final_bound() -> None:
-    require(C < PUBLIC_BOUND, "final comparison C < public bound failed")
-    print("PASS final certified bound C = 0.6906538 < 0.69368")
+def verify_final_bound(verbose: bool = True) -> None:
+    check(C < PUBLIC_BOUND, "final comparison C < public bound failed")
+    emit(verbose, "PASS final certified bound C = 0.6906538 < 0.69368")
+
+
+def run_verification(verbose: bool = True) -> dict[str, object]:
+    s_margin, eta_margin = verify_radius(verbose=verbose)
+    k_interval, d_lower, a1_interval, a2 = verify_integrals(verbose=verbose)
+    y, y2_upper, lower, gap = verify_main_inequality(
+        k_interval,
+        d_lower,
+        a1_interval,
+        a2,
+        verbose=verbose,
+    )
+    verify_final_bound(verbose=verbose)
+
+    return {
+        "description": "Certificate for the asymptotic upper bound C_42 <= 0.6906538",
+        "bound": C_TEXT,
+        "previous_public_bound": PUBLIC_BOUND_TEXT,
+        "tau": TAU_TEXT,
+        "alpha": {"re": ALPHA_RE_TEXT, "im": ALPHA_IM_TEXT},
+        "eta": {"re": ETA_RE_TEXT, "im": ETA_IM_TEXT},
+        "s": {"re": S_RE_TEXT, "im": S_IM_TEXT},
+        "w": {"re": W_RE_TEXT, "im": W_IM_TEXT},
+        "series_terms": {
+            "I_A": I_SERIES_TERMS,
+            "A2": A2_SERIES_TERMS,
+            "log": LOG_SERIES_TERMS,
+            "taylor": TAYLOR_SERIES_TERMS,
+        },
+        "rounding_denominator": fraction_str(Fraction(ROUND_DEN, 1)),
+        "verified_claims": {
+            "radius_s_margin": fraction_str(s_margin),
+            "radius_eta_margin": fraction_str(eta_margin),
+            "main_gap": fraction_str(gap),
+            "final_bound": f"{C_TEXT} < {PUBLIC_BOUND_TEXT}",
+        },
+        "enclosures": {
+            "K": complex_interval_json(k_interval),
+            "D_lower": fraction_str(d_lower),
+            "A1": complex_interval_json(a1_interval),
+            "A2": complex_interval_json(a2),
+            "Y": complex_interval_json(y),
+        },
+        "bounds": {
+            "Y_norm_square_upper": fraction_str(y2_upper),
+            "C2D2_lower_bound": fraction_str(lower),
+            "comparison_gap": fraction_str(gap),
+        },
+        "limitations": {
+            "finite_threshold_N": None,
+            "formalized_asymptotic_proof": False,
+        },
+    }
 
 
 def main() -> None:
-    verify_radius()
-    k_interval, d_lower, a1_interval, a2 = verify_integrals()
-    verify_main_inequality(k_interval, d_lower, a1_interval, a2)
-    verify_final_bound()
+    run_verification(verbose=True)
 
 
 if __name__ == "__main__":
