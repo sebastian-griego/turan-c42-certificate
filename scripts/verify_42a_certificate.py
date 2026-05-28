@@ -49,6 +49,20 @@ TAYLOR_SERIES_TERMS = 35
 ROUND_DEN = 10**60
 
 
+class CertificateError(RuntimeError):
+    pass
+
+
+def require(condition: bool, message: str) -> None:
+    if not condition:
+        raise CertificateError(message)
+
+
+def require_equal(actual: object, expected: object, label: str) -> None:
+    if actual != expected:
+        raise CertificateError(f"{label}: expected {expected}, got {actual}")
+
+
 def round_down(q: Fraction) -> Fraction:
     return Fraction((q.numerator * ROUND_DEN) // q.denominator, ROUND_DEN)
 
@@ -147,7 +161,9 @@ def sci(q: Fraction, places: int = 16) -> str:
 
 def log_near_one_interval(x: Fraction, terms: int = LOG_SERIES_TERMS) -> Interval:
     """Enclose log(x) using 2 atanh((x-1)/(x+1))."""
+    require(x > 0, f"log_near_one_interval expected x > 0, got {x}")
     y = (x - 1) / (x + 1)
+    require(abs(y) < 1, f"atanh log transform expected |y| < 1, got {y}")
     partial = Fraction(0)
     y_power = y
     y2 = y * y
@@ -166,6 +182,7 @@ def log2_interval() -> Interval:
 @lru_cache(maxsize=None)
 def log_interval(x: Fraction) -> Interval:
     """Enclose log(x), reducing by powers of two before using atanh."""
+    require(x > 0, f"log_interval expected x > 0, got {x}")
     z = x
     shift = 0
     while z < Fraction(2, 3):
@@ -184,7 +201,7 @@ def log_interval(x: Fraction) -> Interval:
 @lru_cache(maxsize=None)
 def exp_neg_point_interval(x: Fraction, terms: int = TAYLOR_SERIES_TERMS) -> Interval:
     # e^{-x} = 1 - x + x^2/2! - ... . Here 0 < x < 1.
-    assert 0 <= x < 1
+    require(0 <= x < 1, f"exp_neg_point_interval expected 0 <= x < 1, got {x}")
     term = Fraction(1)
     partial = Fraction(1)
     lower = None
@@ -198,14 +215,14 @@ def exp_neg_point_interval(x: Fraction, terms: int = TAYLOR_SERIES_TERMS) -> Int
         else:
             partial += term
             upper = partial
-    assert lower is not None
+    require(lower is not None, "exp_neg_point_interval did not produce a lower bound")
     return enclose(lower, upper)
 
 
 def exp_neg_interval(x: Interval) -> Interval:
     # These calls come from x^{-a} with 0 < x < 1 and 0 < a < 1, so
     # 0 <= -a log(x) < 1. On this interval e^{-x} is decreasing.
-    assert 0 <= x.lo <= x.hi < 1
+    require(0 <= x.lo <= x.hi < 1, f"exp_neg_interval expected 0 <= lo <= hi < 1, got {x}")
     lower = exp_neg_point_interval(x.hi).lo
     upper = exp_neg_point_interval(x.lo).hi
     return enclose(lower, upper)
@@ -214,7 +231,7 @@ def exp_neg_interval(x: Interval) -> Interval:
 @lru_cache(maxsize=None)
 def cos_point_interval(x: Fraction, terms: int = TAYLOR_SERIES_TERMS) -> Interval:
     # cos(x) = 1 - x^2/2! + x^4/4! - ... . Here 0 <= x < 1.
-    assert 0 <= x < 1
+    require(0 <= x < 1, f"cos_point_interval expected 0 <= x < 1, got {x}")
     x2 = x * x
     term = Fraction(1)
     partial = Fraction(1)
@@ -229,14 +246,14 @@ def cos_point_interval(x: Fraction, terms: int = TAYLOR_SERIES_TERMS) -> Interva
         else:
             partial += term
             upper = partial
-    assert lower is not None
+    require(lower is not None, "cos_point_interval did not produce a lower bound")
     return enclose(lower, upper)
 
 
 @lru_cache(maxsize=None)
 def sin_point_interval(x: Fraction, terms: int = TAYLOR_SERIES_TERMS) -> Interval:
     # sin(x) = x - x^3/3! + x^5/5! - ... . Here 0 <= x < 1.
-    assert 0 <= x < 1
+    require(0 <= x < 1, f"sin_point_interval expected 0 <= x < 1, got {x}")
     x2 = x * x
     term = x
     partial = x
@@ -251,7 +268,7 @@ def sin_point_interval(x: Fraction, terms: int = TAYLOR_SERIES_TERMS) -> Interva
         else:
             partial += term
             upper = partial
-    assert lower is not None
+    require(lower is not None, "sin_point_interval did not produce a lower bound")
     return enclose(lower, upper)
 
 
@@ -259,7 +276,7 @@ def cos_interval(theta: Interval) -> Interval:
     # These calls come from b log(x) with 0 < x < 1 and 0 < b < 1.
     # In this certificate they all lie in (-1, 0), so use evenness and
     # monotonicity of cos on (0, 1).
-    assert -1 < theta.lo <= theta.hi <= 0
+    require(-1 < theta.lo <= theta.hi <= 0, f"cos_interval expected -1 < lo <= hi <= 0, got {theta}")
     abs_lo = -theta.hi
     abs_hi = -theta.lo
     lower = cos_point_interval(abs_hi).lo
@@ -270,7 +287,7 @@ def cos_interval(theta: Interval) -> Interval:
 def sin_interval(theta: Interval) -> Interval:
     # These calls come from b log(x) with 0 < x < 1 and 0 < b < 1.
     # In this certificate they all lie in (-1, 0), where sin is increasing.
-    assert -1 < theta.lo <= theta.hi <= 0
+    require(-1 < theta.lo <= theta.hi <= 0, f"sin_interval expected -1 < lo <= hi <= 0, got {theta}")
     abs_lo = -theta.hi
     abs_hi = -theta.lo
     lower = -sin_point_interval(abs_hi).hi
@@ -378,9 +395,18 @@ def norm_square_upper(z: ComplexInterval) -> Fraction:
 def verify_radius() -> None:
     s_margin = C * C - (S_RE * S_RE + S_IM * S_IM)
     eta_margin = C * C - (ETA_RE * ETA_RE + ETA_IM * ETA_IM)
-    assert s_margin == Fraction(693863919, 5000000000000000)
-    assert eta_margin == Fraction(1374484479, 10000000000000000)
-    assert s_margin > 0 and eta_margin > 0
+    require_equal(
+        s_margin,
+        Fraction(693863919, 5000000000000000),
+        "exact margin for |1-alpha| < C",
+    )
+    require_equal(
+        eta_margin,
+        Fraction(1374484479, 10000000000000000),
+        "exact margin for |eta| < C",
+    )
+    require(s_margin > 0, "radius check failed for |1-alpha| < C")
+    require(eta_margin > 0, "radius check failed for |eta| < C")
     print(f"PASS |1-alpha| < C: exact margin = {s_margin}")
     print(f"PASS |eta| < C: exact margin = {eta_margin}")
 
@@ -417,7 +443,11 @@ def verify_main_inequality(
 
     y2_upper = norm_square_upper(y)
     lower = C * C * d_lower * d_lower
-    assert y2_upper < lower
+    require(
+        y2_upper < lower,
+        f"main inequality failed: |Y|^2 upper bound {y2_upper} "
+        f"is not below C^2 D^2 lower bound {lower}",
+    )
     gap = lower - y2_upper
     print(f"PASS Y enclosure: Re {interval_dec(y.re)}, Im {interval_dec(y.im)}")
     print(f"PASS |Y|^2 upper bound: {dec(y2_upper, 45)}")
@@ -426,7 +456,7 @@ def verify_main_inequality(
 
 
 def verify_final_bound() -> None:
-    assert C < PUBLIC_BOUND
+    require(C < PUBLIC_BOUND, "final comparison C < public bound failed")
     print("PASS final certified bound C = 0.6906538 < 0.69368")
 
 

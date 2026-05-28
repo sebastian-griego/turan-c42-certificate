@@ -334,6 +334,16 @@ $$
 The proof does not rely on this decimal approximation. The strict comparison
 is certified by the rational interval verifier through $|Y|^2<C^2D^2$.
 
+## Slack summary
+
+| Quantity | Certified or numerical value |
+| --- | --- |
+| Claimed bound $C$ | $0.6906538$ |
+| Numerical $|Y|/D$ | approximately $0.690653695151631$ |
+| Numerical slack $C-|Y|/D$ | approximately $1.05\cdot10^{-7}$ |
+| Certified comparison | $|Y|^2<C^2D^2$ |
+| Explicit finite threshold $N$ | not provided |
+
 ## 5. Construction
 
 For $l\ge0$, define
@@ -394,6 +404,10 @@ For $m\in F_n$, define
 $$
 P_m=\frac{n}{m}\beta_{n-m}.
 $$
+
+Since $\alpha$ is not a nonpositive integer, $(\alpha)_l\ne0$ for every
+$l\ge0$. Hence $P_m\ne0$ for all $m\in F_n$, so the expression
+$\overline{P_m}/|P_m|$ below is well-defined.
 
 Define
 
@@ -488,7 +502,42 @@ $$
 
 ## 7. Proof that $b_n=0$
 
-The recursion for $b_l$ is equivalent, through degree $n$, to
+Let
+
+$$
+S(z)=\sum_{l\ge1}S_lz^l,
+\qquad
+B(z)=\sum_{l\ge0}b_lz^l.
+$$
+
+The recursion gives, for $l\ge1$,
+
+$$
+[z^l]B(z)S(z)
+=
+[z^l]\frac{z}{1-z}B(z)-[z^l]zB'(z).
+$$
+
+Hence
+
+$$
+B(z)S(z)=\frac{z}{1-z}B(z)-zB'(z),
+$$
+
+so
+
+$$
+\frac{B'(z)}{B(z)}=\frac{1}{1-z}-\frac{S(z)}{z}.
+$$
+
+Integrating and using $B(0)=1$ gives
+
+$$
+B(z)=(1-z)^{-1}
+\exp\left(-\sum_{m\ge1}\frac{S_mz^m}{m}\right).
+$$
+
+Since $S_m=s=1-\alpha$ for $m\le A_n$, this becomes, through degree $n$,
 
 $$
 B(z)
@@ -497,12 +546,6 @@ B(z)
 \exp\left(
 -\sum_{m>A_n}\frac{(S_m-s)z^m}{m}
 \right),
-$$
-
-where
-
-$$
-B(z)=\sum_{l\ge0}b_lz^l.
 $$
 
 Because $\tau>1/3$, three correction indices are already too large to
@@ -652,9 +695,23 @@ $$
 =A_2.
 $$
 
-The changes caused by replacing $\tau n$ with $\lfloor\tau n\rfloor$ affect
-only $O(1)$ boundary terms. After the normalizations above, those boundary
-contributions are $o(1)$.
+Lemma. Replacing $\tau n$ by $A_n=\lfloor\tau n\rfloor$ does not change any
+of the normalized limits above.
+
+Proof. The symmetric difference between the summation ranges defined by
+$A_n$ and by $\tau n$ contains $O(1)$ indices in each one-dimensional
+boundary. Each one-dimensional boundary term has size $O(n^{a-2})$ before
+normalization, since $\beta_{n-m}=O(n^{a-1})$ away from the endpoint and
+$m\asymp n$. After multiplication by $n^{1-a}$, the total contribution is
+$O(n^{-1})$.
+
+For the double sum, changing one boundary changes $O(n)$ summands. Away from
+the endpoint, each summand has size $O(n^{a-3})$ before normalization:
+$\beta_{n-m_1-m_2}=O(n^{a-1})$ and $m_1m_2\asymp n^2$. After multiplication
+by $n^{1-a}$, these boundary contributions are again $O(n^{-1})$. Endpoint
+ranges with $l=n-m_1-m_2$ bounded are handled by first truncating to
+$l\ge L_0$, applying the uniform estimate away from zero, and then letting
+$L_0\to\infty$, using $a>0$.
 
 It follows that
 
@@ -708,6 +765,12 @@ Q_k+b_1Q_{k-1}+\cdots+b_{k-1}Q_1
 $$
 
 for $1\le k\le n$, with $b_n=0$ used when $k=n$.
+
+For $1\le k\le n-1$, this is the usual Newton identity for the $n-1$ roots
+of $p_n$, after adding the extra root $y_1=1$. For $k=n$, Newton's identity
+for a monic polynomial of degree $n-1$ has no $nb_n$ coefficient term. Thus
+the same displayed formula remains valid exactly when $b_n=0$, which is why
+the construction enforces $b_n=0$.
 
 The $S_k$ satisfy the same triangular system, so
 

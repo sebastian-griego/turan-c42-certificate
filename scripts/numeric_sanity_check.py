@@ -84,6 +84,17 @@ def main() -> None:
     print("C - ratio =")
     print(mp.nstr(c - ratio, 30))
 
+    if not ratio < c:
+        raise RuntimeError(
+            "sanity check failed: "
+            f"ratio = {mp.nstr(ratio, 50)} >= C = {mp.nstr(c, 50)}"
+        )
+
+    if not abs(y) ** 2 < c**2 * d**2:
+        raise RuntimeError("sanity check failed: |Y|^2 >= C^2 D^2")
+
+    print("PASS numerical sanity check: ratio < C")
+
 
 if __name__ == "__main__":
     main()
