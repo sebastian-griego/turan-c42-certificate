@@ -44,5 +44,8 @@ jobs:
       - name: Regenerate certificate files
         run: python3 scripts/export_42a_certificate.py
 
+      - name: Audit exported certificate package
+        run: python3 scripts/audit_42a_certificate_package.py
+
       - name: Check certificate files are reproducible
         run: git diff --exit-code certificate

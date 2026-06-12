@@ -1,0 +1,60 @@
+{
+  "certificate": "turan42_certificate.json",
+  "checks": [
+    {
+      "area": "json_certificate",
+      "check_id": "schema_and_required_fields",
+      "evidence": "top_level_keys=14; required_keys=14",
+      "problems": "[]",
+      "required_action": "Regenerate the certificate JSON and keep the exported schema stable for reviewers.",
+      "status": "pass"
+    },
+    {
+      "area": "package_integrity",
+      "check_id": "sha256_manifest",
+      "evidence": "manifest=turan42_certificate.sha256; expected_entries=turan42_certificate.json,verify_42a_certificate.output.txt",
+      "problems": "[]",
+      "required_action": "Regenerate certificate hashes with scripts/export_42a_certificate.py after certificate changes.",
+      "status": "pass"
+    },
+    {
+      "area": "rational_arithmetic",
+      "check_id": "exact_inequality_margins",
+      "evidence": "bound_delta=15131/5000000; main_gap_decimal_floor=0.000000155006331574",
+      "problems": "[]",
+      "required_action": "Do not advertise the certificate unless all exact rational margins are positive and internally consistent.",
+      "status": "pass"
+    },
+    {
+      "area": "claim_boundary",
+      "check_id": "limitation_disclosure",
+      "evidence": "{\"finite_threshold_N\": null, \"formalized_asymptotic_proof\": false}",
+      "problems": "[]",
+      "required_action": "Keep the asymptotic and no-finite-threshold limitations explicit until stronger proof artifacts exist.",
+      "status": "pass"
+    },
+    {
+      "area": "review_transcript",
+      "check_id": "transcript_consistency",
+      "evidence": "transcript=verify_42a_certificate.output.txt",
+      "problems": "[]",
+      "required_action": "Regenerate the transcript when the verifier output or certified margins change.",
+      "status": "pass"
+    }
+  ],
+  "metrics": {
+    "bound": "3453269/5000000",
+    "main_gap": "3875158289371256773872359825640327197646264577871206259643036305721796827290808841165284121139881341260727140531327839704836369/25000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "main_gap_decimal_floor": "0.000000155006331574",
+    "previous_public_bound": "69368/100000",
+    "public_bound_delta": "15131/5000000",
+    "radius_eta_margin": "1374484479/10000000000000000",
+    "radius_s_margin": "693863919/5000000000000000"
+  },
+  "schema_version": 1,
+  "summary": {
+    "check_count": 5,
+    "failures": 0,
+    "status": "pass"
+  }
+}
