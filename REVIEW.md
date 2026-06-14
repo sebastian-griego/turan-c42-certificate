@@ -52,6 +52,9 @@ verifier:
 - Check the endpoint and floor-error estimates.
 - Run the exact verifier.
 - Regenerate the certificate and check that there is no diff.
+- Run `python scripts/audit_42a_certificate_package.py` to check exported
+  hashes, transcript consistency, exact rational margins, and limitation
+  disclosure.
 - Optionally run the Sage exported-certificate consistency checker.
 
 ## Known limitations

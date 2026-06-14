@@ -3,6 +3,10 @@ name: verify certificate
 on:
   push:
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   verify:
@@ -20,6 +24,12 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Compile Python sources and tests
+        run: python3 -m compileall -q scripts tests
+
+      - name: Run unit smoke tests
+        run: python3 -m unittest discover -s tests
+
       - name: Run exact rational interval verifier
         run: python3 scripts/verify_42a_certificate.py
 
@@ -33,6 +43,9 @@ jobs:
 
       - name: Regenerate certificate files
         run: python3 scripts/export_42a_certificate.py
+
+      - name: Audit exported certificate package
+        run: python3 scripts/audit_42a_certificate_package.py
 
       - name: Check certificate files are reproducible
         run: git diff --exit-code certificate

@@ -13,11 +13,15 @@ The certificate package consists of:
 - the exact verifier: `../scripts/verify_42a_certificate.py`,
 - the exported JSON certificate: `turan42_certificate.json`,
 - the verifier transcript: `verify_42a_certificate.output.txt`,
-- the SHA256 metadata: `turan42_certificate.sha256`.
+- the SHA256 metadata: `turan42_certificate.sha256`,
+- the package audit: `turan42_certificate.audit.json` and
+  `turan42_certificate.audit.md`.
 
 The exact verifier checks the limiting numerical certificate using exact
 integer arithmetic and outward-rounded rational interval arithmetic. The
-asymptotic reduction is in the proof note.
+package audit checks committed hashes, transcript consistency, exact margin
+arithmetic, and limitation disclosure. The asymptotic reduction is in the
+proof note.
 
 No explicit finite threshold `N` is provided.
 

@@ -17,6 +17,7 @@ reduction is proved in the note, not formalized by the verifier.
 - `notes/turan_42a_improved_upper_bound.md`: proof/writeup
 - `scripts/verify_42a_certificate.py`: exact rational interval verifier
 - `scripts/export_42a_certificate.py`: deterministic certificate export
+- `scripts/audit_42a_certificate_package.py`: exported package integrity audit
 - `certificate/`: exported certificate data, transcript, and metadata
 - `scripts/numeric_sanity_check.py`: high-precision numerical sanity check
 - `scripts/verify_42a_certificate_sage.sage`: optional exported-certificate consistency checker
@@ -55,6 +56,12 @@ Regenerate the exported certificate files:
 python3 scripts/export_42a_certificate.py
 ```
 
+Audit the exported package:
+
+```bash
+python3 scripts/audit_42a_certificate_package.py
+```
+
 Run the numerical sanity check:
 
 ```bash
@@ -81,6 +88,7 @@ CI runs:
 - the exact verifier with optimized Python (`python3 -O`),
 - the numerical sanity check,
 - deterministic regeneration of `certificate/`,
+- exported package audit for hash, transcript, and exact-margin consistency,
 - a `git diff --exit-code certificate` reproducibility check.
 
 The exact verifier has no third-party dependencies.
